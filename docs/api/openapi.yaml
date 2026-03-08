@@ -1,0 +1,431 @@
+
+---
+
+# `docs/api/openapi.yaml`
+
+openapi: 3.1.0
+info:
+  title: ATO Login FDS API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Login (records AuthEvent and may create RiskAssessment)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        "401":
+          description: Login failed (generic message)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh tokens (records AuthEvent)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        "200":
+          description: New access/refresh tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        "401":
+          description: Invalid/expired refresh token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/auth/logout:
+    post:
+      summary: Logout (revoke refresh session)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogoutRequest' }
+      responses:
+        "204":
+          description: Logged out
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/users/me/password:
+    post:
+      summary: Change password (requires current password)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        "204":
+          description: Password changed
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/admin/risks:
+    get:
+      summary: List risk assessments
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: level
+          schema: { type: string, enum: [LOW, MED, HIGH] }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: userId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RiskSummary' }
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/admin/risks/{riskId}:
+    get:
+      summary: Risk detail (includes hitRules and original event)
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: riskId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RiskDetail' }
+
+  /api/v1/admin/users/{userId}/lock:
+    post:
+      summary: Lock user
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReason' }
+      responses:
+        "204": { description: Locked }
+
+  /api/v1/admin/users/{userId}/unlock:
+    post:
+      summary: Unlock user
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReason' }
+      responses:
+        "204": { description: Unlocked }
+
+  /api/v1/admin/users/{userId}/force-logout:
+    post:
+      summary: Force logout (revoke sessions + bump security_version)
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReason' }
+      responses:
+        "204": { description: Forced logout }
+
+  /api/v1/admin/blocklist/ip:
+    post:
+      summary: Add IP to blocklist
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockIpRequest' }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockIpResponse' }
+    get:
+      summary: List blocked IPs
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BlockIpResponse' }
+
+  /api/v1/admin/blocklist/ip/{blockId}:
+    delete:
+      summary: Disable a blocked IP
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: blockId
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Disabled }
+
+  /api/v1/admin/audit/actions:
+    get:
+      summary: List admin actions (audit log)
+      description: ADMIN only
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: actionType
+          schema: { type: string }
+        - in: query
+          name: targetUserId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminActionSummary' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string, example: "user@example.com" }
+        password: { type: string, example: "P@ssw0rd!" }
+        deviceId:
+          type: string
+          description: Client-provided device identifier (server hashes it)
+
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user:
+          type: object
+          properties:
+            userId: { type: integer }
+            role: { type: string, enum: [USER, ADMIN] }
+            status: { type: string, enum: [ACTIVE, LOCKED, DISABLED] }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string }
+        newPassword: { type: string }
+
+    RiskSummary:
+      type: object
+      properties:
+        riskId: { type: integer }
+        createdAt: { type: string, format: date-time }
+        userId: { type: integer, nullable: true }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        level: { type: string, enum: [LOW, MED, HIGH] }
+        eventType: { type: string }
+        country: { type: string, nullable: true }
+        ip: { type: string }
+
+    HitRule:
+      type: object
+      required: [ruleId, weight]
+      properties:
+        ruleId: { type: string, example: "R001_NEW_DEVICE" }
+        weight: { type: integer }
+        evidence:
+          type: object
+          additionalProperties: true
+
+    RiskDetail:
+      type: object
+      properties:
+        riskId: { type: integer }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        level: { type: string, enum: [LOW, MED, HIGH] }
+        hitRules:
+          type: array
+          items: { $ref: '#/components/schemas/HitRule' }
+        event:
+          type: object
+          properties:
+            eventId: { type: integer }
+            eventType: { type: string }
+            occurredAt: { type: string, format: date-time }
+            ip: { type: string }
+            userAgent: { type: string, nullable: true }
+            geoCountryIso: { type: string, nullable: true }
+            geoCity: { type: string, nullable: true }
+
+    AdminReason:
+      type: object
+      properties:
+        reason: { type: string }
+
+    BlockIpRequest:
+      type: object
+      required: [ip]
+      properties:
+        ip: { type: string, example: "203.0.113.10" }
+        reason: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    BlockIpResponse:
+      type: object
+      properties:
+        blockId: { type: integer }
+        ip: { type: string }
+        isActive: { type: boolean }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    AdminActionSummary:
+      type: object
+      properties:
+        actionId: { type: integer }
+        createdAt: { type: string, format: date-time }
+        adminUserId: { type: integer }
+        targetUserId: { type: integer, nullable: true }
+        actionType: { type: string }
+        reason: { type: string, nullable: true }
+
+    ErrorResponse:
+      type: object
+      properties:
+        code: { type: string, example: "AUTH_FAILED" }
+        message: { type: string, example: "Invalid credentials" }
+        requestId: { type: string, nullable: true }
